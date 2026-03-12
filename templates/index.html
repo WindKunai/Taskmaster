@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Tasks – Taskmaster{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1>My Tasks</h1>
+        <p class="stats">{{ done_count }} of {{ total }} completed</p>
+    </div>
+
+    <div class="filter-bar">
+        <a href="{{ url_for('index', filter='all') }}"
+           class="filter-btn {% if filter_by == 'all' %}active{% endif %}">All</a>
+        <a href="{{ url_for('index', filter='active') }}"
+           class="filter-btn {% if filter_by == 'active' %}active{% endif %}">Active</a>
+        <a href="{{ url_for('index', filter='done') }}"
+           class="filter-btn {% if filter_by == 'done' %}active{% endif %}">Done</a>
+    </div>
+
+    {% if tasks %}
+        <ul class="task-list">
+            {% for task in tasks %}
+            <li class="task-item {% if task.done %}done{% endif %}">
+                <div class="task-info">
+                    <span class="task-title">{{ task.title }}</span>
+                    {% if task.description %}
+                        <p class="task-desc">{{ task.description }}</p>
+                    {% endif %}
+                    <span class="task-date">{{ task.created_at.strftime('%b %d, %Y') }}</span>
+                </div>
+                <div class="task-actions">
+                    <form method="POST" action="{{ url_for('toggle_task', task_id=task.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-toggle" title="{{ 'Mark active' if task.done else 'Mark done' }}">
+                            {{ '↩ Undo' if task.done else '✓ Done' }}
+                        </button>
+                    </form>
+                    <a href="{{ url_for('edit_task', task_id=task.id) }}" class="btn btn-edit">✎ Edit</a>
+                    <form method="POST" action="{{ url_for('delete_task', task_id=task.id) }}" style="display:inline;"
+                          onsubmit="return confirm('Delete this task?');">
+                        <button type="submit" class="btn btn-delete">✕ Delete</button>
+                    </form>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <div class="empty-state">
+            <p>No tasks here. <a href="{{ url_for('add_task') }}">Add one!</a></p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
