@@ -5,25 +5,125 @@
 {% block content %}
 <div class="container form-container">
     <h1>Edit Task</h1>
-    <form method="POST" action="{{ url_for('edit_task', task_id=task.id) }}">
+    <form method="POST" action="{{ url_for('edit_task', task_id=task.id) }}" id="task-form">
+        <input type="hidden" name="content_type" id="content_type"
+               value="{{ 'list' if task.task_list else 'text' }}">
+        <input type="hidden" name="list_items" id="list_items" value="[]">
+
         <div class="form-group">
             <label for="title">Title <span class="required">*</span></label>
             <input type="text" id="title" name="title" value="{{ task.title }}"
                    maxlength="200" required autofocus>
         </div>
+
         <div class="form-group">
-            <label for="description">Description</label>
-            <textarea id="description" name="description" rows="4">{{ task.description }}</textarea>
+            <div class="type-toggle">
+                <button type="button" class="type-btn {{ '' if task.task_list else 'active' }}" data-type="text">Text</button>
+                <button type="button" class="type-btn {{ 'active' if task.task_list else '' }}" data-type="list">List</button>
+            </div>
         </div>
+
+        <div id="panel-text" {% if task.task_list %}style="display:none;"{% endif %}>
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" rows="4">{{ task.description }}</textarea>
+            </div>
+        </div>
+
+        <div id="panel-list" {% if not task.task_list %}style="display:none;"{% endif %}>
+            <div class="form-group">
+                <label>Items</label>
+                <ul class="list-builder" id="list-builder"></ul>
+                <button type="button" class="btn btn-secondary" id="add-item-btn" style="margin-top:.5rem;">+ Add item</button>
+            </div>
+        </div>
+
         <div class="form-group">
             <label for="due_date">Due date</label>
             <input type="date" id="due_date" name="due_date"
                    value="{{ task.due_date.isoformat() if task.due_date else '' }}">
         </div>
+
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save Changes</button>
             <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>
+
+<script>
+(function () {
+    const typeInput = document.getElementById('content_type');
+    const listInput = document.getElementById('list_items');
+    const panelText = document.getElementById('panel-text');
+    const panelList = document.getElementById('panel-list');
+    const builder = document.getElementById('list-builder');
+    const addBtn = document.getElementById('add-item-btn');
+
+    // Seed existing items from server
+    let items = {{ (task.task_list.items | map(attribute='text') | list | tojson) if task.task_list else '[]' }}.map((text, i) => ({
+        text,
+        completed: {{ (task.task_list.items | map(attribute='completed') | list | tojson) if task.task_list else '[]' }}[i] || false
+    }));
+
+    document.querySelectorAll('.type-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const type = btn.dataset.type;
+            typeInput.value = type;
+            panelText.style.display = type === 'text' ? '' : 'none';
+            panelList.style.display = type === 'list' ? '' : 'none';
+        });
+    });
+
+    function render() {
+        builder.innerHTML = '';
+        items.forEach((item, i) => {
+            const li = document.createElement('li');
+            li.className = 'list-builder-item';
+            li.innerHTML = `
+                <input type="text" class="list-item-input" value="${escHtml(item.text)}" placeholder="Item text..." data-i="${i}">
+                <button type="button" class="btn btn-delete list-item-remove" data-i="${i}" tabindex="-1">✕</button>
+            `;
+            builder.appendChild(li);
+        });
+        sync();
+    }
+
+    function sync() {
+        listInput.value = JSON.stringify(items);
+    }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    }
+
+    builder.addEventListener('input', e => {
+        if (e.target.classList.contains('list-item-input')) {
+            items[+e.target.dataset.i].text = e.target.value;
+            sync();
+        }
+    });
+
+    builder.addEventListener('click', e => {
+        const btn = e.target.closest('.list-item-remove');
+        if (btn) {
+            items.splice(+btn.dataset.i, 1);
+            render();
+        }
+    });
+
+    addBtn.addEventListener('click', () => {
+        items.push({ text: '', completed: false });
+        render();
+        const inputs = builder.querySelectorAll('.list-item-input');
+        if (inputs.length) inputs[inputs.length - 1].focus();
+    });
+
+    document.getElementById('task-form').addEventListener('submit', sync);
+
+    render(); // draw existing items on load
+})();
+</script>
 {% endblock %}

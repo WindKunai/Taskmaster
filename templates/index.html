@@ -24,25 +24,51 @@
             <li class="task-item {% if task.done %}done{% endif %}">
                 <div class="task-info">
                     <span class="task-title">{{ task.title }}</span>
-                    {% if task.description %}
+
+                    {% if task.task_list %}
+                        <ul class="task-checklist">
+                            {% for item in task.task_list.items %}
+                            <li class="checklist-item {% if item.completed %}checked{% endif %}">
+                                <form method="POST" action="{{ url_for('toggle_item', item_id=item.id) }}" style="display:contents;">
+                                    <button type="submit" class="checklist-box" title="Toggle item" aria-label="Toggle"></button>
+                                </form>
+                                <span class="checklist-text">{{ item.text }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% set total_items = task.task_list.items | length %}
+                        {% set done_items = task.task_list.items | selectattr('completed') | list | length %}
+                        {% if total_items %}
+                            <span class="checklist-progress">{{ done_items }}/{{ total_items }} done</span>
+                        {% endif %}
+                    {% elif task.description %}
                         <p class="task-desc">{{ task.description }}</p>
                     {% endif %}
-                    <span class="task-date">Created at: {{ task.created_at.strftime('%b %d, %Y') }}</span> 
-                    <span class="task-due_date">Due date: {{ task.due_date.strftime('%b %d, %Y') if task.due_date else ' None' }}</span>
+
+                    <span class="task-date">
+                        Created {{ task.created_at.strftime('%b %d, %Y') }}
+                        {% if task.due_date %}
+                            &nbsp;·&nbsp;
+                            <span class="due-badge {% if not task.done and task.due_date < today %}due-overdue{% elif not task.done and task.due_date == today %}due-today{% endif %}">
+                                Due {{ task.due_date.strftime('%b %d, %Y') }}
+                            </span>
+                            <form method="POST" action="{{ url_for('remove_due_date', task_id=task.id) }}" style="display:inline;">
+                                <button type="submit" class="due-remove" title="Remove due date">✕</button>
+                            </form>
+                        {% endif %}
+                    </span>
                 </div>
                 <div class="task-actions">
-                    <div class="task-actions">
-                        <form method="POST" action="{{ url_for('toggle_task', task_id=task.id) }}">
-                            <button type="submit" class="btn btn-toggle" title="{{ 'Mark active' if task.done else 'Mark done' }}">
-                                {{ '↩ Undo' if task.done else '✓ Done' }}
-                            </button>
-                        </form>
-                        <a href="{{ url_for('edit_task', task_id=task.id) }}" class="btn btn-edit">✎ Edit</a>
-                        <form method="POST" action="{{ url_for('delete_task', task_id=task.id) }}"
-                            onsubmit="return confirm('Delete this task?');">
-                            <button type="submit" class="btn btn-delete">✕ Delete</button>
-                        </form>
-                    </div>
+                    <form method="POST" action="{{ url_for('toggle_task', task_id=task.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-toggle" title="{{ 'Mark active' if task.done else 'Mark done' }}">
+                            {{ '↩ Undo' if task.done else '✓ Done' }}
+                        </button>
+                    </form>
+                    <a href="{{ url_for('edit_task', task_id=task.id) }}" class="btn btn-edit">✎ Edit</a>
+                    <form method="POST" action="{{ url_for('delete_task', task_id=task.id) }}" style="display:inline;"
+                          onsubmit="return confirm('Delete this task?');">
+                        <button type="submit" class="btn btn-delete">✕ Delete</button>
+                    </form>
                 </div>
             </li>
             {% endfor %}
