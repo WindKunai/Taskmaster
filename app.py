@@ -1,12 +1,15 @@
 import os
+from dotenv import load_dotenv
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
+
+load_dotenv()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'change-me-in-production')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tasks.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SQLALCHEMY_DATABASE_URI')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = os.environ.get('SQLALCHEMY_TRACK_MODIFICATIONS')
 
 db = SQLAlchemy(app)
 
@@ -17,10 +20,21 @@ class Task(db.Model):
     description = db.Column(db.Text, default='')
     done = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
+    due_date = db.Column(db.Date, nullable=True)
+ 
     def __repr__(self):
         return f'<Task {self.id}: {self.title}>'
 
+
+def parse_due_date(value: str):
+    """Return a date object from an ISO string, or None if blank/invalid."""
+    value = (value or '').strip()
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 @app.route('/')
 def index():
@@ -45,7 +59,11 @@ def add_task():
         if not title:
             flash('Task title is required.', 'error')
             return render_template('add_task.html')
-        task = Task(title=title, description=description)
+        task = Task(
+            title=title,
+            description=description,
+            due_date=parse_due_date(request.form.get('due_date')),
+        )
         db.session.add(task)
         db.session.commit()
         flash('Task added successfully!', 'success')
@@ -64,6 +82,7 @@ def edit_task(task_id):
             return render_template('edit_task.html', task=task)
         task.title = title
         task.description = description
+        task.due_date = parse_due_date(request.form.get('due_date'))
         db.session.commit()
         flash('Task updated successfully!', 'success')
         return redirect(url_for('index'))

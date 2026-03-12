@@ -177,6 +177,12 @@ main {
     margin-top: .4rem;
 }
 
+.task-due_date {
+    font-size: .75rem;
+    color: #a0aec0;
+    display: block;
+    margin-top: .4rem;
+}
 .task-actions {
     display: flex;
     gap: .4rem;
