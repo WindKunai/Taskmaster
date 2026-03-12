@@ -1,18 +1,33 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Taskmaster{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script>
+        // Apply saved theme before paint to avoid flash
+        (function() {
+            const t = localStorage.getItem('tm-theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
 </head>
 <body>
     <header>
         <nav>
-            <a href="{{ url_for('index') }}" class="brand">Taskmaster</a>
-            <a href="{{ url_for('add_task') }}" class="btn btn-primary">+ New Task</a>
+            <a href="{{ url_for('index') }}" class="brand">
+                <span class="brand-mark">T</span>
+                TASKMASTER
+            </a>
+            <div class="nav-right">
+                <button class="theme-toggle" id="theme-toggle" title="Toggle theme">◐ THEME</button>
+                <a href="{{ url_for('add_task') }}" class="btn btn-primary">+ NEW</a>
+            </div>
         </nav>
     </header>
+
+    {% block stats_bar %}{% endblock %}
 
     <main>
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -29,7 +44,20 @@
     </main>
 
     <footer>
-        <p>Taskmaster &mdash; Simple task management</p>
+        <p>TASKMASTER &mdash; {{ now.strftime('%Y') if now is defined else '2026' }}</p>
     </footer>
+
+    <script>
+        // Theme toggle
+        const toggleBtn = document.getElementById('theme-toggle');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', () => {
+                const html = document.documentElement;
+                const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                html.setAttribute('data-theme', next);
+                localStorage.setItem('tm-theme', next);
+            });
+        }
+    </script>
 </body>
 </html>

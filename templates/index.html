@@ -2,81 +2,152 @@
 
 {% block title %}Tasks – Taskmaster{% endblock %}
 
-{% block content %}
-<div class="container">
-    <div class="page-header">
-        <h1>My Tasks</h1>
-        <p class="stats">{{ done_count }} of {{ total }} completed</p>
-    </div>
-
-    <div class="filter-bar">
-        <a href="{{ url_for('index', filter='all') }}"
-           class="filter-btn {% if filter_by == 'all' %}active{% endif %}">All</a>
-        <a href="{{ url_for('index', filter='active') }}"
-           class="filter-btn {% if filter_by == 'active' %}active{% endif %}">Active</a>
-        <a href="{{ url_for('index', filter='done') }}"
-           class="filter-btn {% if filter_by == 'done' %}active{% endif %}">Done</a>
-    </div>
-
-    {% if tasks %}
-        <ul class="task-list">
-            {% for task in tasks %}
-            <li class="task-item {% if task.done %}done{% endif %}">
-                <div class="task-info">
-                    <span class="task-title">{{ task.title }}</span>
-
-                    {% if task.task_list %}
-                        <ul class="task-checklist">
-                            {% for item in task.task_list.items %}
-                            <li class="checklist-item {% if item.completed %}checked{% endif %}">
-                                <form method="POST" action="{{ url_for('toggle_item', item_id=item.id) }}" style="display:contents;">
-                                    <button type="submit" class="checklist-box" title="Toggle item" aria-label="Toggle"></button>
-                                </form>
-                                <span class="checklist-text">{{ item.text }}</span>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                        {% set total_items = task.task_list.items | length %}
-                        {% set done_items = task.task_list.items | selectattr('completed') | list | length %}
-                        {% if total_items %}
-                            <span class="checklist-progress">{{ done_items }}/{{ total_items }} done</span>
-                        {% endif %}
-                    {% elif task.description %}
-                        <p class="task-desc">{{ task.description }}</p>
-                    {% endif %}
-
-                    <span class="task-date">
-                        Created {{ task.created_at.strftime('%b %d, %Y') }}
-                        {% if task.due_date %}
-                            &nbsp;·&nbsp;
-                            <span class="due-badge {% if not task.done and task.due_date < today %}due-overdue{% elif not task.done and task.due_date == today %}due-today{% endif %}">
-                                Due {{ task.due_date.strftime('%b %d, %Y') }}
-                            </span>
-                            <form method="POST" action="{{ url_for('remove_due_date', task_id=task.id) }}" style="display:inline;">
-                                <button type="submit" class="due-remove" title="Remove due date">✕</button>
-                            </form>
-                        {% endif %}
-                    </span>
-                </div>
-                <div class="task-actions">
-                    <form method="POST" action="{{ url_for('toggle_task', task_id=task.id) }}" style="display:inline;">
-                        <button type="submit" class="btn btn-toggle" title="{{ 'Mark active' if task.done else 'Mark done' }}">
-                            {{ '↩ Undo' if task.done else '✓ Done' }}
-                        </button>
-                    </form>
-                    <a href="{{ url_for('edit_task', task_id=task.id) }}" class="btn btn-edit">✎ Edit</a>
-                    <form method="POST" action="{{ url_for('delete_task', task_id=task.id) }}" style="display:inline;"
-                          onsubmit="return confirm('Delete this task?');">
-                        <button type="submit" class="btn btn-delete">✕ Delete</button>
-                    </form>
-                </div>
-            </li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <div class="empty-state">
-            <p>No tasks here. <a href="{{ url_for('add_task') }}">Add one!</a></p>
+{% block stats_bar %}
+<div class="stats-bar">
+    <div class="stats-bar-inner">
+        <div class="stat-cell">
+            <span class="stat-label">Total</span>
+            <span class="stat-value">{{ total }}</span>
         </div>
-    {% endif %}
+        <div class="stat-cell">
+            <span class="stat-label">Done</span>
+            <span class="stat-value green">{{ done_count }}</span>
+        </div>
+        <div class="stat-cell">
+            <span class="stat-label">Active</span>
+            <span class="stat-value accent">{{ total - done_count }}</span>
+        </div>
+        <div class="stat-cell">
+            <span class="stat-label">This month</span>
+            <span class="stat-value amber">{{ month_count }}</span>
+        </div>
+        <div class="stat-cell">
+            <span class="stat-label">Streak</span>
+            <span class="stat-value {% if streak >= 3 %}accent{% else %}{% endif %}">{{ streak }}d</span>
+        </div>
+        <div class="stat-cell">
+            <span class="stat-label">Overdue</span>
+            <span class="stat-value {% if overdue_count > 0 %}amber{% endif %}">{{ overdue_count }}</span>
+        </div>
+    </div>
 </div>
+{% if total > 0 %}
+<div class="progress-bar-wrap">
+    <div class="progress-track">
+        <div class="progress-fill" style="width: {{ ((done_count / total) * 100)|round|int }}%"></div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>// TASKS</h1>
+</div>
+
+<div class="toolbar">
+    <div class="filter-bar">
+        <a href="{{ url_for('index', filter='all', sort=sort_by) }}"
+           class="filter-btn {% if filter_by == 'all' %}active{% endif %}">ALL</a>
+        <a href="{{ url_for('index', filter='active', sort=sort_by) }}"
+           class="filter-btn {% if filter_by == 'active' %}active{% endif %}">ACTIVE</a>
+        <a href="{{ url_for('index', filter='done', sort=sort_by) }}"
+           class="filter-btn {% if filter_by == 'done' %}active{% endif %}">DONE</a>
+    </div>
+    <div class="toolbar-sep"></div>
+    <form method="GET" action="{{ url_for('index') }}" style="display:flex;align-items:center;gap:.35rem;">
+        <input type="hidden" name="filter" value="{{ filter_by }}">
+        <select name="sort" class="sort-select" onchange="this.form.submit()">
+            <option value="created" {% if sort_by == 'created' %}selected{% endif %}>↓ CREATED</option>
+            <option value="due" {% if sort_by == 'due' %}selected{% endif %}>↓ DUE DATE</option>
+            <option value="title" {% if sort_by == 'title' %}selected{% endif %}>↓ TITLE</option>
+        </select>
+    </form>
+</div>
+
+{% if tasks %}
+    <ul class="task-list" id="task-list">
+        {% for task in tasks %}
+        {% set days_left = (task.due_date - today).days if task.due_date else none %}
+        <li class="task-item {% if task.done %}done{% elif task.due_date and task.due_date < today %}overdue{% elif task.due_date and days_left <= 2 %}due-soon{% endif %}"
+            data-title="{{ task.title }}"
+            data-created="{{ task.created_at.isoformat() }}"
+            data-due="{{ task.due_date.isoformat() if task.due_date else '' }}">
+
+            <div class="task-check-wrap">
+                <form method="POST" action="{{ url_for('toggle_task', task_id=task.id) }}" style="display:contents;">
+                    <button type="submit" class="quick-check" title="{{ 'Mark active' if task.done else 'Mark done' }}"></button>
+                </form>
+            </div>
+
+            <div class="task-body">
+                <div class="task-title-row">
+                    <span class="task-title">{{ task.title }}</span>
+                    {% if task.task_list %}
+                        <span class="task-type-badge">LIST</span>
+                    {% endif %}
+                </div>
+
+                {% if task.task_list %}
+                    {% set total_items = task.task_list.items | length %}
+                    {% set done_items = task.task_list.items | selectattr('completed') | list | length %}
+                    <ul class="task-checklist">
+                        {% for item in task.task_list.items %}
+                        <li class="checklist-item {% if item.completed %}checked{% endif %}">
+                            <form method="POST" action="{{ url_for('toggle_item', item_id=item.id) }}" style="display:contents;">
+                                <button type="submit" class="checklist-box" title="Toggle"></button>
+                            </form>
+                            <span class="checklist-text">{{ item.text }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% if total_items %}
+                        <div class="checklist-progress-bar">
+                            <div class="checklist-progress-fill" style="width:{{ ((done_items / total_items) * 100)|round|int }}%"></div>
+                        </div>
+                        <div class="checklist-progress-label">{{ done_items }}/{{ total_items }} ITEMS</div>
+                    {% endif %}
+                {% elif task.description %}
+                    <p class="task-desc">{{ task.description }}</p>
+                {% endif %}
+
+                <div class="task-meta">
+                    <span class="task-date-label">{{ task.created_at.strftime('%d %b %Y') }}</span>
+
+                    {% if task.due_date %}
+                        {% if task.done %}
+                            <span class="due-pill done-style">✓ {{ task.due_date.strftime('%d %b') }}</span>
+                        {% elif days_left < 0 %}
+                            <span class="due-pill overdue">{{ days_left|abs }}d OVERDUE</span>
+                        {% elif days_left == 0 %}
+                            <span class="due-pill today">DUE TODAY</span>
+                        {% elif days_left <= 2 %}
+                            <span class="due-pill soon">{{ days_left }}d LEFT</span>
+                        {% else %}
+                            <span class="due-pill neutral">{{ days_left }}d · {{ task.due_date.strftime('%d %b') }}</span>
+                        {% endif %}
+                        <form method="POST" action="{{ url_for('remove_due_date', task_id=task.id) }}" style="display:inline;">
+                            <button type="submit" class="due-remove" title="Remove due date">✕</button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="task-actions">
+                <a href="{{ url_for('edit_task', task_id=task.id) }}" class="btn btn-icon btn-edit" title="Edit">✎</a>
+                <form method="POST" action="{{ url_for('delete_task', task_id=task.id) }}" style="display:inline;"
+                      onsubmit="return confirm('Delete this task?');">
+                    <button type="submit" class="btn btn-icon btn-delete" title="Delete">✕</button>
+                </form>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <div class="empty-state">
+        <span class="empty-glyph">▣</span>
+        No tasks here.<br>
+        <a href="{{ url_for('add_task') }}">Create one →</a>
+    </div>
+{% endif %}
 {% endblock %}

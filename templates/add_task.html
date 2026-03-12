@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container form-container">
-    <h1>Add New Task</h1>
+    <h1>// NEW TASK</h1>
     <form method="POST" action="{{ url_for('add_task') }}" id="task-form">
         <input type="hidden" name="content_type" id="content_type" value="text">
         <input type="hidden" name="list_items" id="list_items" value="[]">
@@ -16,9 +16,10 @@
         </div>
 
         <div class="form-group">
+            <label>Content type</label>
             <div class="type-toggle">
-                <button type="button" class="type-btn active" data-type="text">Text</button>
-                <button type="button" class="type-btn" data-type="list">List</button>
+                <button type="button" class="type-btn active" data-type="text">TEXT</button>
+                <button type="button" class="type-btn" data-type="list">LIST</button>
             </div>
         </div>
 
@@ -34,7 +35,7 @@
             <div class="form-group">
                 <label>Items</label>
                 <ul class="list-builder" id="list-builder"></ul>
-                <button type="button" class="btn btn-secondary" id="add-item-btn" style="margin-top:.5rem;">+ Add item</button>
+                <button type="button" class="btn btn-secondary" id="add-item-btn" style="margin-top:.5rem;">+ ADD ITEM</button>
             </div>
         </div>
 
@@ -44,8 +45,8 @@
         </div>
 
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Add Task</button>
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">ADD TASK</button>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">CANCEL</a>
         </div>
     </form>
 </div>
@@ -76,45 +77,27 @@
         items.forEach((item, i) => {
             const li = document.createElement('li');
             li.className = 'list-builder-item';
-            li.innerHTML = `
-                <input type="text" class="list-item-input" value="${escHtml(item.text)}" placeholder="Item text..." data-i="${i}">
-                <button type="button" class="btn btn-delete list-item-remove" data-i="${i}" tabindex="-1">✕</button>
-            `;
+            li.innerHTML = `<input type="text" class="list-item-input" value="${esc(item.text)}" placeholder="Item text..." data-i="${i}"><button type="button" class="btn btn-delete btn-icon list-item-remove" data-i="${i}" tabindex="-1">✕</button>`;
             builder.appendChild(li);
         });
         sync();
     }
 
-    function sync() {
-        listInput.value = JSON.stringify(items);
-    }
-
-    function escHtml(s) {
-        return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
-    }
+    function sync() { listInput.value = JSON.stringify(items); }
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
     builder.addEventListener('input', e => {
-        if (e.target.classList.contains('list-item-input')) {
-            items[+e.target.dataset.i].text = e.target.value;
-            sync();
-        }
+        if (e.target.classList.contains('list-item-input')) { items[+e.target.dataset.i].text = e.target.value; sync(); }
     });
-
     builder.addEventListener('click', e => {
         const btn = e.target.closest('.list-item-remove');
-        if (btn) {
-            items.splice(+btn.dataset.i, 1);
-            render();
-        }
+        if (btn) { items.splice(+btn.dataset.i, 1); render(); }
     });
-
     addBtn.addEventListener('click', () => {
-        items.push({ text: '', completed: false });
-        render();
+        items.push({ text: '', completed: false }); render();
         const inputs = builder.querySelectorAll('.list-item-input');
         if (inputs.length) inputs[inputs.length - 1].focus();
     });
-
     document.getElementById('task-form').addEventListener('submit', sync);
 })();
 </script>

@@ -3,7 +3,7 @@ import json
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 
 load_dotenv()
 
@@ -55,7 +55,6 @@ class TaskListItem(db.Model):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def parse_due_date(value: str):
-    """Return a date object from an ISO string, or None if blank/invalid."""
     value = (value or '').strip()
     if not value:
         return None
@@ -66,25 +65,19 @@ def parse_due_date(value: str):
 
 
 def save_list_items(task, items_json: str):
-    """Parse JSON list items and attach them to a task, replacing any existing list."""
     try:
         items = json.loads(items_json or '[]')
     except (ValueError, TypeError):
         items = []
-
     if not isinstance(items, list):
         return
-
     if task.task_list:
         db.session.delete(task.task_list)
         db.session.flush()
-
     if not items:
         return
-
     task_list = TaskList(task=task)
     db.session.add(task_list)
-
     for pos, item in enumerate(items):
         text = (item.get('text') or '').strip()
         if text:
@@ -96,22 +89,71 @@ def save_list_items(task, items_json: str):
             ))
 
 
+def compute_streak() -> int:
+    """Count consecutive days (ending today) that had at least one completion."""
+    today = date.today()
+    streak = 0
+    cursor = today
+    while True:
+        start = datetime(cursor.year, cursor.month, cursor.day, tzinfo=timezone.utc)
+        end = start + timedelta(days=1)
+        count = Task.query.filter(
+            Task.done == True,
+            Task.created_at >= start,
+            Task.created_at < end,
+        ).count()
+        if count == 0:
+            break
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route('/')
 def index():
     filter_by = request.args.get('filter', 'all')
+    sort_by = request.args.get('sort', 'created')
+
+    query = Task.query
     if filter_by == 'active':
-        tasks = Task.query.filter_by(done=False).order_by(Task.created_at.desc()).all()
+        query = query.filter_by(done=False)
     elif filter_by == 'done':
-        tasks = Task.query.filter_by(done=True).order_by(Task.created_at.desc()).all()
+        query = query.filter_by(done=True)
+
+    if sort_by == 'due':
+        # nulls last
+        query = query.order_by(Task.due_date.is_(None), Task.due_date.asc())
+    elif sort_by == 'title':
+        query = query.order_by(Task.title.asc())
     else:
-        tasks = Task.query.order_by(Task.created_at.desc()).all()
+        query = query.order_by(Task.created_at.desc())
+
+    tasks = query.all()
     total = Task.query.count()
     done_count = Task.query.filter_by(done=True).count()
     today = date.today()
+
+    # Tasks completed this calendar month
+    month_start = datetime(today.year, today.month, 1, tzinfo=timezone.utc)
+    month_count = Task.query.filter(
+        Task.done == True,
+        Task.created_at >= month_start,
+    ).count()
+
+    overdue_count = Task.query.filter(
+        Task.done == False,
+        Task.due_date < today,
+        Task.due_date.isnot(None),
+    ).count()
+
+    streak = compute_streak()
+
     return render_template('index.html', tasks=tasks, filter_by=filter_by,
-                           total=total, done_count=done_count, today=today)
+                           sort_by=sort_by, total=total, done_count=done_count,
+                           today=today, month_count=month_count,
+                           overdue_count=overdue_count, streak=streak)
 
 
 @app.route('/add', methods=['GET', 'POST'])
@@ -120,11 +162,9 @@ def add_task():
         title = request.form.get('title', '').strip()
         description = request.form.get('description', '').strip()
         content_type = request.form.get('content_type', 'text')
-
         if not title:
             flash('Task title is required.', 'error')
             return render_template('add_task.html')
-
         task = Task(
             title=title,
             description=description if content_type == 'text' else '',
@@ -132,12 +172,10 @@ def add_task():
         )
         db.session.add(task)
         db.session.flush()
-
         if content_type == 'list':
             save_list_items(task, request.form.get('list_items', '[]'))
-
         db.session.commit()
-        flash('Task added successfully!', 'success')
+        flash('Task added.', 'success')
         return redirect(url_for('index'))
     return render_template('add_task.html')
 
@@ -149,14 +187,11 @@ def edit_task(task_id):
         title = request.form.get('title', '').strip()
         description = request.form.get('description', '').strip()
         content_type = request.form.get('content_type', 'text')
-
         if not title:
             flash('Task title is required.', 'error')
             return render_template('edit_task.html', task=task)
-
         task.title = title
         task.due_date = parse_due_date(request.form.get('due_date'))
-
         if content_type == 'text':
             task.description = description
             if task.task_list:
@@ -164,9 +199,8 @@ def edit_task(task_id):
         else:
             task.description = ''
             save_list_items(task, request.form.get('list_items', '[]'))
-
         db.session.commit()
-        flash('Task updated successfully!', 'success')
+        flash('Task updated.', 'success')
         return redirect(url_for('index'))
     return render_template('edit_task.html', task=task)
 
