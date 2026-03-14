@@ -6,7 +6,6 @@
     <title>{% block title %}Taskmaster{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script>
-        // Apply saved theme before paint to avoid flash
         (function() {
             const t = localStorage.getItem('tm-theme') || 'dark';
             document.documentElement.setAttribute('data-theme', t);
@@ -29,26 +28,27 @@
 
     {% block stats_bar %}{% endblock %}
 
-    <main>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="flash-messages">
-                    {% for category, message in messages %}
-                        <div class="flash flash-{{ category }}">{{ message }}</div>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        {% endwith %}
-
-        {% block content %}{% endblock %}
-    </main>
+    <div class="page-wrap">
+        {% block sidebar %}{% endblock %}
+        <main>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="flash flash-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
 
     <footer>
-        <p>TASKMASTER &mdash; {{ now.strftime('%Y') if now is defined else '2026' }}</p>
+        <p>TASKMASTER &mdash; 2026</p>
     </footer>
 
     <script>
-        // Theme toggle
         const toggleBtn = document.getElementById('theme-toggle');
         if (toggleBtn) {
             toggleBtn.addEventListener('click', () => {

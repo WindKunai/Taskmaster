@@ -1,19 +1,15 @@
 {% extends "base.html" %}
-
 {% block title %}Edit Task – Taskmaster{% endblock %}
-
 {% block content %}
 <div class="container form-container">
     <h1>// EDIT TASK</h1>
     <form method="POST" action="{{ url_for('edit_task', task_id=task.id) }}" id="task-form">
-        <input type="hidden" name="content_type" id="content_type"
-               value="{{ 'list' if task.task_list else 'text' }}">
+        <input type="hidden" name="content_type" id="content_type" value="{{ 'list' if task.task_list else 'text' }}">
         <input type="hidden" name="list_items" id="list_items" value="[]">
 
         <div class="form-group">
             <label for="title">Title <span class="required">*</span></label>
-            <input type="text" id="title" name="title" value="{{ task.title }}"
-                   maxlength="200" required autofocus>
+            <input type="text" id="title" name="title" value="{{ task.title }}" maxlength="200" required autofocus>
         </div>
 
         <div class="form-group">
@@ -45,65 +41,61 @@
                    value="{{ task.due_date.isoformat() if task.due_date else '' }}">
         </div>
 
+        {% if all_categories %}
+        <div class="form-group">
+            <label>Categories</label>
+            {% set task_cat_ids = task.categories | map(attribute='id') | list %}
+            <div class="cat-checkbox-grid">
+                {% for cat in all_categories %}
+                <label class="cat-checkbox-label {% if cat.id in task_cat_ids %}checked{% endif %}">
+                    <input type="checkbox" name="categories" value="{{ cat.id }}"
+                           {% if cat.id in task_cat_ids %}checked{% endif %}>
+                    <span class="cat-dot" style="background:{{ cat.color }}"></span>
+                    {{ cat.name }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">SAVE CHANGES</button>
             <a href="{{ url_for('index') }}" class="btn btn-secondary">CANCEL</a>
         </div>
     </form>
 </div>
-
 <script>
-(function () {
-    const typeInput = document.getElementById('content_type');
-    const listInput = document.getElementById('list_items');
-    const panelText = document.getElementById('panel-text');
-    const panelList = document.getElementById('panel-list');
-    const builder = document.getElementById('list-builder');
-    const addBtn = document.getElementById('add-item-btn');
-
-    let items = {{ (task.task_list.items | map(attribute='text') | list | tojson) if task.task_list else '[]' }}.map((text, i) => ({
-        text,
-        completed: {{ (task.task_list.items | map(attribute='completed') | list | tojson) if task.task_list else '[]' }}[i] || false
+(function(){
+    const typeInput=document.getElementById('content_type'),listInput=document.getElementById('list_items'),
+          panelText=document.getElementById('panel-text'),panelList=document.getElementById('panel-list'),
+          builder=document.getElementById('list-builder'),addBtn=document.getElementById('add-item-btn');
+    let items={{ (task.task_list.items|map(attribute='text')|list|tojson) if task.task_list else '[]' }}.map((text,i)=>({
+        text, completed:{{ (task.task_list.items|map(attribute='completed')|list|tojson) if task.task_list else '[]' }}[i]||false
     }));
-
-    document.querySelectorAll('.type-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            const type = btn.dataset.type;
-            typeInput.value = type;
-            panelText.style.display = type === 'text' ? '' : 'none';
-            panelList.style.display = type === 'list' ? '' : 'none';
-        });
-    });
-
-    function render() {
-        builder.innerHTML = '';
-        items.forEach((item, i) => {
-            const li = document.createElement('li');
-            li.className = 'list-builder-item';
-            li.innerHTML = `<input type="text" class="list-item-input" value="${esc(item.text)}" placeholder="Item text..." data-i="${i}"><button type="button" class="btn btn-delete btn-icon list-item-remove" data-i="${i}" tabindex="-1">✕</button>`;
+    document.querySelectorAll('.type-btn').forEach(btn=>btn.addEventListener('click',()=>{
+        document.querySelectorAll('.type-btn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        const t=btn.dataset.type; typeInput.value=t;
+        panelText.style.display=t==='text'?'':'none';
+        panelList.style.display=t==='list'?'':'none';
+    }));
+    function render(){
+        builder.innerHTML='';
+        items.forEach((item,i)=>{
+            const li=document.createElement('li'); li.className='list-builder-item';
+            li.innerHTML=`<input type="text" class="list-item-input" value="${esc(item.text)}" placeholder="Item text..." data-i="${i}"><button type="button" class="btn btn-delete btn-icon list-item-remove" data-i="${i}" tabindex="-1">✕</button>`;
             builder.appendChild(li);
-        });
-        sync();
+        }); sync();
     }
-
-    function sync() { listInput.value = JSON.stringify(items); }
-    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-
-    builder.addEventListener('input', e => {
-        if (e.target.classList.contains('list-item-input')) { items[+e.target.dataset.i].text = e.target.value; sync(); }
+    function sync(){listInput.value=JSON.stringify(items);}
+    function esc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+    builder.addEventListener('input',e=>{if(e.target.classList.contains('list-item-input')){items[+e.target.dataset.i].text=e.target.value;sync();}});
+    builder.addEventListener('click',e=>{const btn=e.target.closest('.list-item-remove');if(btn){items.splice(+btn.dataset.i,1);render();}});
+    addBtn.addEventListener('click',()=>{items.push({text:'',completed:false});render();const inp=builder.querySelectorAll('.list-item-input');if(inp.length)inp[inp.length-1].focus();});
+    document.getElementById('task-form').addEventListener('submit',sync);
+    document.querySelectorAll('.cat-checkbox-label input').forEach(cb=>{
+        cb.addEventListener('change',()=>cb.closest('label').classList.toggle('checked',cb.checked));
     });
-    builder.addEventListener('click', e => {
-        const btn = e.target.closest('.list-item-remove');
-        if (btn) { items.splice(+btn.dataset.i, 1); render(); }
-    });
-    addBtn.addEventListener('click', () => {
-        items.push({ text: '', completed: false }); render();
-        const inputs = builder.querySelectorAll('.list-item-input');
-        if (inputs.length) inputs[inputs.length - 1].focus();
-    });
-    document.getElementById('task-form').addEventListener('submit', sync);
     render();
 })();
 </script>

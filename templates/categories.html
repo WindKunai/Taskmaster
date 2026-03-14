@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Categories – Taskmaster{% endblock %}
+{% block content %}
+<div class="form-container">
+    <h1>// CATEGORIES</h1>
+
+    <form method="POST" action="{{ url_for('manage_categories') }}">
+        <input type="hidden" name="action" value="add">
+        <div style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;">
+            <div class="form-group" style="flex:1;min-width:160px;margin-bottom:0;">
+                <label for="name">New category</label>
+                <input type="text" id="name" name="name" placeholder="Name" maxlength="50" required>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label for="color">Color</label>
+                <input type="color" id="color" name="color" value="#d4862a">
+            </div>
+            <button type="submit" class="btn btn-primary" style="margin-bottom:0;">ADD</button>
+        </div>
+    </form>
+
+    {% if categories %}
+    <table class="cat-table" style="margin-top:1.5rem;">
+        <thead>
+            <tr>
+                <th>Color</th>
+                <th>Name</th>
+                <th>Tasks</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cat in categories %}
+            <tr>
+                <td><span class="cat-dot" style="background:{{ cat.color }};display:inline-block;width:10px;height:10px;border-radius:50%;"></span></td>
+                <td>
+                    <span class="cat-tag" style="background:{{ cat.color }}18;border-color:{{ cat.color }}55;color:{{ cat.color }};">{{ cat.name }}</span>
+                </td>
+                <td style="font-family:var(--mono);font-size:.8rem;color:var(--text2);">{{ cat.tasks | length }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('manage_categories') }}" style="display:inline;"
+                          onsubmit="return confirm('Delete category \'{{ cat.name }}\'?');">
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="cat_id" value="{{ cat.id }}">
+                        <button type="submit" class="btn btn-sm btn-delete">DELETE</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state" style="padding:2rem 0;">
+        <span class="empty-glyph">◈</span>
+        No categories yet.
+    </div>
+    {% endif %}
+
+    <div style="margin-top:1.5rem;">
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">← BACK</a>
+    </div>
+</div>
+{% endblock %}

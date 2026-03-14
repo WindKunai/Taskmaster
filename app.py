@@ -17,6 +17,23 @@ db = SQLAlchemy(app)
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
+# Association table: many tasks <-> many categories
+task_categories = db.Table(
+    'task_categories',
+    db.Column('task_id', db.Integer, db.ForeignKey('task.id'), primary_key=True),
+    db.Column('category_id', db.Integer, db.ForeignKey('category.id'), primary_key=True),
+)
+
+
+class Category(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False, unique=True)
+    color = db.Column(db.String(7), nullable=False, default='#8a8680')  # hex
+
+    def __repr__(self):
+        return f'<Category {self.name}>'
+
+
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
@@ -27,6 +44,8 @@ class Task(db.Model):
 
     task_list = db.relationship('TaskList', back_populates='task',
                                 uselist=False, cascade='all, delete-orphan')
+    categories = db.relationship('Category', secondary=task_categories,
+                                 backref='tasks', lazy='subquery')
 
     def __repr__(self):
         return f'<Task {self.id}: {self.title}>'
@@ -89,32 +108,26 @@ def save_list_items(task, items_json: str):
             ))
 
 
-def compute_streak() -> int:
-    """Count consecutive days (ending today) that had at least one completion."""
-    today = date.today()
-    streak = 0
-    cursor = today
-    while True:
-        start = datetime(cursor.year, cursor.month, cursor.day, tzinfo=timezone.utc)
-        end = start + timedelta(days=1)
-        count = Task.query.filter(
-            Task.done == True,
-            Task.created_at >= start,
-            Task.created_at < end,
-        ).count()
-        if count == 0:
-            break
-        streak += 1
-        cursor -= timedelta(days=1)
-    return streak
+def resolve_categories(cat_ids: list[str]) -> list[Category]:
+    """Return Category objects for a list of id strings, ignoring invalid ones."""
+    cats = []
+    for cid in cat_ids:
+        try:
+            cat = db.session.get(Category, int(cid))
+            if cat:
+                cats.append(cat)
+        except (ValueError, TypeError):
+            pass
+    return cats
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route('/')
 def index():
-    filter_by = request.args.get('filter', 'all')
-    sort_by = request.args.get('sort', 'created')
+    filter_by = request.args.get('filter', 'active')   # default: active
+    sort_by = request.args.get('sort', 'due')           # default: due date
+    cat_filter = request.args.get('cat', '')            # category id or ''
 
     query = Task.query
     if filter_by == 'active':
@@ -122,8 +135,13 @@ def index():
     elif filter_by == 'done':
         query = query.filter_by(done=True)
 
+    if cat_filter:
+        try:
+            query = query.filter(Task.categories.any(Category.id == int(cat_filter)))
+        except (ValueError, TypeError):
+            cat_filter = ''
+
     if sort_by == 'due':
-        # nulls last
         query = query.order_by(Task.due_date.is_(None), Task.due_date.asc())
     elif sort_by == 'title':
         query = query.order_by(Task.title.asc())
@@ -135,7 +153,6 @@ def index():
     done_count = Task.query.filter_by(done=True).count()
     today = date.today()
 
-    # Tasks completed this calendar month
     month_start = datetime(today.year, today.month, 1, tzinfo=timezone.utc)
     month_count = Task.query.filter(
         Task.done == True,
@@ -148,28 +165,32 @@ def index():
         Task.due_date.isnot(None),
     ).count()
 
-    streak = compute_streak()
+    all_categories = Category.query.order_by(Category.name).all()
 
     return render_template('index.html', tasks=tasks, filter_by=filter_by,
-                           sort_by=sort_by, total=total, done_count=done_count,
+                           sort_by=sort_by, cat_filter=cat_filter,
+                           total=total, done_count=done_count,
                            today=today, month_count=month_count,
-                           overdue_count=overdue_count, streak=streak)
+                           overdue_count=overdue_count,
+                           all_categories=all_categories)
 
 
 @app.route('/add', methods=['GET', 'POST'])
 def add_task():
+    all_categories = Category.query.order_by(Category.name).all()
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
         description = request.form.get('description', '').strip()
         content_type = request.form.get('content_type', 'text')
         if not title:
             flash('Task title is required.', 'error')
-            return render_template('add_task.html')
+            return render_template('add_task.html', all_categories=all_categories)
         task = Task(
             title=title,
             description=description if content_type == 'text' else '',
             due_date=parse_due_date(request.form.get('due_date')),
         )
+        task.categories = resolve_categories(request.form.getlist('categories'))
         db.session.add(task)
         db.session.flush()
         if content_type == 'list':
@@ -177,21 +198,23 @@ def add_task():
         db.session.commit()
         flash('Task added.', 'success')
         return redirect(url_for('index'))
-    return render_template('add_task.html')
+    return render_template('add_task.html', all_categories=all_categories)
 
 
 @app.route('/edit/<int:task_id>', methods=['GET', 'POST'])
 def edit_task(task_id):
     task = db.get_or_404(Task, task_id)
+    all_categories = Category.query.order_by(Category.name).all()
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
         description = request.form.get('description', '').strip()
         content_type = request.form.get('content_type', 'text')
         if not title:
             flash('Task title is required.', 'error')
-            return render_template('edit_task.html', task=task)
+            return render_template('edit_task.html', task=task, all_categories=all_categories)
         task.title = title
         task.due_date = parse_due_date(request.form.get('due_date'))
+        task.categories = resolve_categories(request.form.getlist('categories'))
         if content_type == 'text':
             task.description = description
             if task.task_list:
@@ -202,7 +225,7 @@ def edit_task(task_id):
         db.session.commit()
         flash('Task updated.', 'success')
         return redirect(url_for('index'))
-    return render_template('edit_task.html', task=task)
+    return render_template('edit_task.html', task=task, all_categories=all_categories)
 
 
 @app.route('/toggle/<int:task_id>', methods=['POST'])
@@ -236,6 +259,35 @@ def delete_task(task_id):
     db.session.commit()
     flash('Task deleted.', 'success')
     return redirect(url_for('index'))
+
+
+# ── Category management ───────────────────────────────────────────────────────
+
+@app.route('/categories', methods=['GET', 'POST'])
+def manage_categories():
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add':
+            name = request.form.get('name', '').strip()
+            color = request.form.get('color', '#8a8680').strip()
+            if name:
+                if Category.query.filter_by(name=name).first():
+                    flash('Category already exists.', 'error')
+                else:
+                    db.session.add(Category(name=name, color=color))
+                    db.session.commit()
+                    flash(f'Category "{name}" added.', 'success')
+            else:
+                flash('Category name is required.', 'error')
+        elif action == 'delete':
+            cat_id = request.form.get('cat_id')
+            cat = db.get_or_404(Category, cat_id)
+            db.session.delete(cat)
+            db.session.commit()
+            flash(f'Category "{cat.name}" deleted.', 'success')
+        return redirect(url_for('manage_categories'))
+    categories = Category.query.order_by(Category.name).all()
+    return render_template('categories.html', categories=categories)
 
 
 if __name__ == '__main__':
