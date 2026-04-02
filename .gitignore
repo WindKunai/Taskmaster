@@ -17,3 +17,6 @@ instance/
 .env/
 venv/
 env/
+
+# Chats
+conversations/

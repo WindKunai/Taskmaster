@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat – Taskmaster</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+    <script>
+        (function() {
+            const t = localStorage.getItem('tm-theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
+</head>
+<body class="chat-page">
+
+<header>
+    <nav>
+        <a href="{{ url_for('index') }}" class="brand">
+            <span class="brand-mark">T</span>
+            TASKMASTER
+        </a>
+        <div class="nav-right">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm">← TASKS</a>
+            <button class="theme-toggle" id="theme-toggle" title="Toggle theme">◐ THEME</button>
+        </div>
+    </nav>
+</header>
+
+<div class="chat-shell">
+
+    <!-- ── Conversation list sidebar ── -->
+    <aside class="chat-sidebar">
+        <div class="chat-sidebar-header">
+            <span class="sidebar-heading">// CHATS</span>
+            <button class="btn btn-primary btn-sm" id="new-conv-btn">+ NEW</button>
+        </div>
+
+        <!-- new conversation form (hidden by default) -->
+        <form method="POST" action="{{ url_for('chat_new') }}" id="new-conv-form" style="display:none;">
+            <div class="new-conv-input-wrap">
+                <input type="text" name="title" id="new-conv-title"
+                       placeholder="Conversation title…" maxlength="80" autocomplete="off">
+                <div style="display:flex;gap:.3rem;margin-top:.35rem;">
+                    <button type="submit" class="btn btn-primary btn-sm" style="flex:1;">CREATE</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="cancel-new-btn">✕</button>
+                </div>
+            </div>
+        </form>
+
+        <div class="conv-list" id="conv-list">
+            {% if conversations %}
+                {% for conv in conversations %}
+                <div class="conv-item {% if active_conv and active_conv.id == conv.id %}active{% endif %}"
+                     data-id="{{ conv.id }}">
+                    <a href="{{ url_for('chat_open', conv_id=conv.id) }}" class="conv-item-link">
+                        <span class="conv-title">{{ conv.title }}</span>
+                        <span class="conv-meta">
+                            <span class="conv-count">{{ conv.message_count }}msg</span>
+                        </span>
+                    </a>
+                    <form method="POST" action="{{ url_for('chat_delete', conv_id=conv.id) }}"
+                          onsubmit="return confirm('Delete this conversation?');"
+                          class="conv-delete-form">
+                        <button type="submit" class="conv-delete-btn" title="Delete">✕</button>
+                    </form>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="conv-empty">No conversations yet.</div>
+            {% endif %}
+        </div>
+    </aside>
+
+    <!-- ── Main chat area ── -->
+    <div class="chat-main">
+        {% if active_conv %}
+        <div class="chat-topbar">
+            <div class="chat-topbar-left">
+                <span class="chat-conv-title" id="chat-conv-title"
+                      title="Click to rename" data-id="{{ active_conv.id }}">
+                    {{ active_conv.title }}
+                </span>
+                <span class="chat-conv-badge">{{ active_conv.messages | length }} msg</span>
+            </div>
+            <div class="chat-topbar-right">
+                <span class="chat-model-label">claude-opus-4-6</span>
+            </div>
+        </div>
+
+        <div class="chat-messages" id="chat-messages">
+            {% if not active_conv.messages %}
+            <div class="chat-welcome" id="chat-welcome">
+                <span class="chat-welcome-glyph">◈</span>
+                <p>Start a new conversation.</p>
+            </div>
+            {% endif %}
+            {% for msg in active_conv.messages %}
+            <div class="chat-msg chat-msg--{{ msg.role }}">
+                <div class="chat-msg-role">{{ 'YOU' if msg.role == 'user' else 'AI' }}</div>
+                <div class="chat-msg-bubble">
+                    <div class="chat-msg-text"{% if msg.role == "assistant" %} data-raw="{{ msg.content | e }}"{% endif %}>{{ msg.content }}</div>
+                    {% if msg.ts %}
+                    <div class="chat-msg-ts">{{ msg.ts[:16].replace('T', ' ') }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            <div id="typing-indicator" class="chat-msg chat-msg--assistant" style="display:none;">
+                <div class="chat-msg-role">AI</div>
+                <div class="chat-msg-bubble">
+                    <div class="typing-dots"><span></span><span></span><span></span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-input-bar">
+            <div class="chat-input-wrap">
+                <textarea id="chat-input" class="chat-input"
+                          placeholder="Message…" rows="1"
+                          maxlength="8000" autocomplete="off"></textarea>
+                <button id="send-btn" class="chat-send-btn" title="Send (Enter)">
+                    <span>SEND</span>
+                    <span class="send-arrow">↑</span>
+                </button>
+            </div>
+            <div class="chat-input-hint">Enter to send &nbsp;·&nbsp; Shift+Enter for new line</div>
+        </div>
+
+        {% else %}
+        <!-- No active conversation -->
+        <div class="chat-no-conv">
+            <span class="empty-glyph">◈</span>
+            <p>Select a conversation or create a new one.</p>
+            <button class="btn btn-primary" id="new-conv-cta">+ NEW CONVERSATION</button>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<script>
+(function () {
+    // ── Theme toggle ──
+    const toggleBtn = document.getElementById('theme-toggle');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+            const html = document.documentElement;
+            const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', next);
+            localStorage.setItem('tm-theme', next);
+        });
+    }
+
+    // ── New conversation form toggle ──
+    const newConvBtn   = document.getElementById('new-conv-btn');
+    const newConvCta   = document.getElementById('new-conv-cta');
+    const newConvForm  = document.getElementById('new-conv-form');
+    const cancelNewBtn = document.getElementById('cancel-new-btn');
+    const newConvTitle = document.getElementById('new-conv-title');
+
+    function showNewConvForm() {
+        newConvForm.style.display = 'block';
+        newConvTitle.focus();
+    }
+
+    if (newConvBtn)  newConvBtn .addEventListener('click', showNewConvForm);
+    if (newConvCta)  newConvCta .addEventListener('click', showNewConvForm);
+    if (cancelNewBtn) cancelNewBtn.addEventListener('click', () => {
+        newConvForm.style.display = 'none';
+        newConvTitle.value = '';
+    });
+
+    // ── Scroll to bottom ──
+    const messagesEl = document.getElementById('chat-messages');
+    function scrollBottom() {
+        if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+    scrollBottom();
+
+    {% if active_conv %}
+    const CONV_ID = "{{ active_conv.id }}";
+
+    // ── Auto-resize textarea ──
+    const input = document.getElementById('chat-input');
+    if (input) {
+        input.addEventListener('input', () => {
+            input.style.height = 'auto';
+            input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+        });
+    }
+
+    // ── Inline rename ──
+    const titleEl = document.getElementById('chat-conv-title');
+    if (titleEl) {
+        titleEl.addEventListener('dblclick', () => {
+            const current = titleEl.textContent.trim();
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.value = current;
+            inp.className = 'chat-rename-input';
+            titleEl.replaceWith(inp);
+            inp.focus();
+            inp.select();
+
+            async function commit() {
+                const val = inp.value.trim() || current;
+                try {
+                    const r = await fetch(`/chat/${CONV_ID}/rename`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({title: val}),
+                    });
+                    const data = await r.json();
+                    titleEl.textContent = data.title || val;
+                } catch { titleEl.textContent = val; }
+                inp.replaceWith(titleEl);
+                // update sidebar title
+                const sideItem = document.querySelector(`.conv-item[data-id="${CONV_ID}"] .conv-title`);
+                if (sideItem) sideItem.textContent = titleEl.textContent;
+            }
+
+            inp.addEventListener('blur', commit);
+            inp.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+                if (e.key === 'Escape') { inp.value = current; inp.blur(); }
+            });
+        });
+        titleEl.title = 'Double-click to rename';
+    }
+
+    // ── Send message ──
+    const sendBtn  = document.getElementById('send-btn');
+    const typingEl = document.getElementById('typing-indicator');
+    const welcomeEl = document.getElementById('chat-welcome');
+    let sending = false;
+
+    // Configure marked
+    marked.setOptions({ breaks: true, gfm: true });
+
+    function formatText(text, role) {
+        if (role === 'assistant') {
+            return marked.parse(String(text));
+        }
+        // User messages: escape and preserve line breaks
+        return String(text)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/\n/g, '<br>');
+    }
+
+    // Re-render existing assistant messages on page load
+    document.querySelectorAll('.chat-msg--assistant .chat-msg-text').forEach(el => {
+        const raw = el.getAttribute('data-raw');
+        if (raw) el.innerHTML = marked.parse(raw);
+    });
+
+    function appendMessage(role, content, ts) {
+        if (welcomeEl) welcomeEl.style.display = 'none';
+        const div = document.createElement('div');
+        div.className = `chat-msg chat-msg--${role}`;
+        div.innerHTML = `
+            <div class="chat-msg-role">${role === 'user' ? 'YOU' : 'AI'}</div>
+            <div class="chat-msg-bubble">
+                <div class="chat-msg-text">${formatText(content, role)}</div>
+                <div class="chat-msg-ts">${(ts||'').slice(0,16).replace('T',' ')}</div>
+            </div>`;
+        messagesEl.insertBefore(div, typingEl);
+        scrollBottom();
+    }
+
+    async function sendMessage() {
+        if (sending) return;
+        const text = input.value.trim();
+        if (!text) return;
+
+        sending = true;
+        sendBtn.disabled = true;
+        input.value = '';
+        input.style.height = 'auto';
+
+        const now = new Date().toISOString();
+        appendMessage('user', text, now);
+
+        typingEl.style.display = 'flex';
+        scrollBottom();
+
+        try {
+            const r = await fetch(`/chat/${CONV_ID}/send`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message: text}),
+            });
+            const data = await r.json();
+            typingEl.style.display = 'none';
+
+            if (data.error) {
+                appendMessage('assistant', '⚠ Error: ' + data.error, new Date().toISOString());
+            } else {
+                appendMessage('assistant', data.reply, new Date().toISOString());
+                // update sidebar title if auto-renamed
+                const sideItem = document.querySelector(`.conv-item[data-id="${CONV_ID}"] .conv-title`);
+                if (sideItem && data.title) sideItem.textContent = data.title;
+                if (titleEl && data.title) titleEl.textContent = data.title;
+            }
+        } catch (err) {
+            typingEl.style.display = 'none';
+            appendMessage('assistant', '⚠ Network error. Please try again.', new Date().toISOString());
+        }
+
+        sending = false;
+        sendBtn.disabled = false;
+        input.focus();
+        scrollBottom();
+    }
+
+    if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+    if (input) {
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    }
+    {% endif %}
+})();
+</script>
+</body>
+</html>
