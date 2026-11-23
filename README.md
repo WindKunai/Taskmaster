@@ -30,7 +30,7 @@
 **1. Clone and enter the project**
 
 ```bash
-git clone https://github.com/yourname/taskmaster.git
+git clone https://github.com/WindKunai/taskmaster.git
 cd taskmaster
 ```
 
